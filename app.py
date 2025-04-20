@@ -1,4 +1,3 @@
-# app.py (Corrected: DataFrame.append fix + Vertical Price Ranges)
 import logging
 import os
 
@@ -6,6 +5,59 @@ import joblib
 import numpy as np # Make sure numpy is imported
 import pandas as pd
 import streamlit as st
+
+# --- Page Configuration (Must be the first Streamlit command) ---
+st.set_page_config(
+    page_title="Ames Housing Predictor", # Sets browser tab title
+    layout="wide",                     # Use wide layout for better space utilization
+    initial_sidebar_state="auto"       # Keep sidebar state as default
+)
+
+# --- Inject CSS for Background Color and Styling ---
+# Using st.markdown to inject custom CSS for background color
+# You can change '#f0f2f6' to any desired color hex code (e.g., '#e8f0fe' for a light blue tint)
+# Or use color names like 'lightgray', 'lightblue' etc.
+st.markdown("""
+    <style>
+    /* Target the main block container */
+    .main .block-container {
+        padding-top: 2rem; /* Add some padding at the top */
+        padding-bottom: 2rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
+    }
+    /* Target the Streamlit app itself for background */
+    /* .stApp may change in future Streamlit versions, adjust if needed */
+     div[data-testid="stAppViewContainer"] > .main {
+        background-color: #f0f2f6; /* Light gray background */
+    }
+
+    /* Style headers */
+    h1, h2, h3 {
+        color: #1E3A8A; /* Dark blue color for headers */
+    }
+
+    /* Style the button */
+    .stButton>button {
+        background-color: #1E3A8A; /* Dark blue background */
+        color: white; /* White text */
+        border-radius: 5px;
+        padding: 0.5rem 1rem;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #1D4ED8; /* Slightly lighter blue on hover */
+        color: white;
+    }
+
+    /* Style the prediction result */
+    .stSuccess p {
+        font-size: 1.1rem; /* Make success text slightly larger */
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 
 # --- Configuration ---
 MODEL_DIR = "saved_model"
@@ -55,7 +107,9 @@ def load_artifacts():
         pipeline = joblib.load(MODEL_PATH); logging.info("Pipeline loaded.")
         feature_list = joblib.load(FEATURES_PATH); logging.info("Feature list loaded.")
         bin_edges = joblib.load(BIN_EDGES_PATH); logging.info(f"Bin edges loaded: {bin_edges}") # Log loaded edges
-        st.success("Loaded pre-trained model and configuration.")
+        # The line below has been removed as requested previously
+        # st.success("Loaded pre-trained model and configuration.")
+        logging.info("Loaded pre-trained model and configuration artifacts.") # Log instead of showing success message
         return pipeline, feature_list, bin_edges
     except Exception as e:
         st.error(f"An error occurred loading model artifacts: {e}")
@@ -74,27 +128,32 @@ def format_currency(value):
         return "N/A" # Handle potential errors if value isn't numeric
 
 # --- Streamlit UI ---
-st.title("Ames Housing Price Category Prediction")
+st.title("🏠 Ames Housing Price Category Prediction") # Added an emoji for visual appeal
 
 if pipeline and feature_list and bin_edges is not None: # Check all artifacts loaded
-    st.write("Enter house details to predict its price category (Low, Medium, High).")
+    st.write("Enter house details below to predict its price category (Low, Medium, High).")
 
-    # --- Display Price Ranges (Updated formatting: Vertical) ---
+    st.markdown("---") # Visual separator
+
+    # --- Display Price Ranges ---
     try:
-        # Assuming bin_edges is a numpy array like [min, edge1, edge2, max] from qcut
         if len(bin_edges) == 4:
             st.subheader("Price Category Ranges (based on training data):")
-            # Use st.markdown for vertical stacking and standard text size
-            st.markdown(f"**Low:** Up to {format_currency(bin_edges[1])}")
-            st.markdown(f"**Medium:** {format_currency(bin_edges[1])} - {format_currency(bin_edges[2])}")
-            st.markdown(f"**High:** Above {format_currency(bin_edges[2])}")
-            st.markdown("---") # Add a visual separator
+            col_low, col_med, col_high = st.columns(3) # Use columns for ranges
+            with col_low:
+                st.metric(label="Low", value=f"Up to {format_currency(bin_edges[1])}")
+            with col_med:
+                st.metric(label="Medium", value=f"{format_currency(bin_edges[1])} - {format_currency(bin_edges[2])}")
+            with col_high:
+                st.metric(label="High", value=f"Above {format_currency(bin_edges[2])}")
         else:
             st.warning("Loaded bin edges have an unexpected format. Cannot display ranges.")
             logging.warning(f"Unexpected bin_edges format: {bin_edges}")
     except Exception as e:
         st.error(f"Could not display price ranges due to an error: {e}")
         logging.error(f"Error displaying price ranges: {e}")
+
+    st.markdown("---") # Visual separator
 
 
     # --- Input Form ---
@@ -134,10 +193,9 @@ if pipeline and feature_list and bin_edges is not None: # Check all artifacts lo
         else:
             pass # Silently ignore UI features not found in the model's feature list
 
-    st.markdown("---")
-    st.write("_Note: Using a simplified input form. Provide values for the fields above._")
+    st.markdown("---") # Visual separator
 
-    # --- Prediction Logic (includes fix for DataFrame.append) ---
+    # --- Prediction Logic ---
     if st.button("Predict Price Category"):
         try:
             # 1. Prepare the input data row as a dictionary
@@ -181,7 +239,8 @@ if pipeline and feature_list and bin_edges is not None: # Check all artifacts lo
             expected_order = ['Low', 'Medium', 'High']
             ordered_cols = [c for c in expected_order if c in proba_df.columns] + [c for c in proba_df.columns if c not in expected_order]
             proba_df = proba_df[ordered_cols]
-            st.dataframe(proba_df.style.format("{:.2%}"))
+            # Use st.dataframe for better table display
+            st.dataframe(proba_df.style.format("{:.1%}").highlight_max(axis=1, color='lightblue'))
 
         except Exception as e:
             st.error(f"An error occurred during prediction: {e}")
@@ -189,3 +248,7 @@ if pipeline and feature_list and bin_edges is not None: # Check all artifacts lo
 else:
      # This message shows if artifacts failed to load
      st.warning("Could not load model artifacts. Please ensure `python train.py` has been run successfully.")
+
+# --- Add a footer (optional) ---
+st.markdown("---")
+st.caption("Ames Housing Price Predictor App")
